@@ -10,12 +10,13 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "double-chain.h"
 #include "rlu-wrapper.h"
 
 // @Sanidhya consider changing this to 3250000, the dchain size I used in the bug scenario
-#define DCHAIN_SIZE 64
+#define DCHAIN_SIZE 3250000
 #define NUM_ITERS 10000000
 
 static struct NfosDoubleChain* dchain;
@@ -103,7 +104,7 @@ static void *nfos_dchain_test_alloc_free_ind(void* id) {
       num_alloc_inds++;
   }
 
-  for (int i = 0; i < NUM_ITERS; i++) {
+  for (int i = 0; i < NUM_ITERS / 2; i++) {
     int rand_num = rand_gen_output(&rand_gen);
 
     // alloc
@@ -118,6 +119,25 @@ static void *nfos_dchain_test_alloc_free_ind(void* id) {
       num_alloc_inds--;
     }
   }
+
+  sleep(5);
+
+  for (int i = NUM_ITERS / 2; i < NUM_ITERS; i++) {
+    int rand_num = rand_gen_output(&rand_gen);
+
+    // alloc
+    if (rand_num > (INT32_MAX >> 2)) {
+      if (alloc_index(dchain, &alloc_inds[core][num_alloc_inds]))
+        num_alloc_inds++;
+    // free a random index allocated by the same core
+    } else if (num_alloc_inds > 0) {
+      int freed_ind = rand_num % num_alloc_inds;
+      free_index(dchain, alloc_inds[core][freed_ind]);
+      alloc_inds[core][freed_ind] = alloc_inds[core][num_alloc_inds - 1];
+      num_alloc_inds--;
+    }
+  }
+
 
   return NULL;
 }
@@ -147,7 +167,7 @@ int main(int argc, char *argv[]) {
   // Init dchain
   nfos_dchain_allocate(DCHAIN_SIZE, &dchain);
   printf("== initial state of dchain (note the padding cells contain garbage) ==\n");
-  nfos_dchain_dump(dchain, DCHAIN_SIZE);
+  //nfos_dchain_dump(dchain, DCHAIN_SIZE);
 
   // Launch threads
   int *thread_ids = malloc(sizeof(int) * num_threads);
@@ -174,7 +194,7 @@ int main(int argc, char *argv[]) {
   RLU_FINISH();
 
   printf("== dump dchain again to verify its integrity ==\n");
-  nfos_dchain_dump(dchain, DCHAIN_SIZE);
+  //nfos_dchain_dump(dchain, DCHAIN_SIZE);
 
   return 0;
 }
